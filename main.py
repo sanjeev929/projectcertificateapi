@@ -1,11 +1,40 @@
-import smtplib, random
+import asyncpg
+import smtplib
+import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from fastapi import FastAPI, Request
 
 app = FastAPI()
+
+async def connect_to_db():
+    return await asyncpg.connect(user="postgres", password="123",
+                                 database="certificate", host="localhost")
+
 def generate_otp():
     return str(random.randint(100000, 999999))
+
+async def send_email(email, otp):
+    message = MIMEMultipart()
+    message["From"] = "GOVT Verification COVID-19"  # Sender's email address
+    message["To"] = email
+    message["Subject"] = "OTP for Verification"
+    body = f"Your OTP is: {otp}"
+    message.attach(MIMEText(body, "plain"))
+
+    s = smtplib.SMTP('smtp.gmail.com', 587)
+    s.starttls()
+    s.login("sanjeevsanju929@gmail.com", "fhge kait cnqe mjba")
+    s.sendmail("sanjeevsanju929@gmail.com", email, message.as_string())
+    s.quit()
+
+async def check_email_exist(conn, email):
+    try:
+        query = "SELECT COUNT(*) FROM users WHERE email = $1"
+        result = await conn.fetchval(query, email)
+        return result > 0
+    except:
+        return False
 
 @app.post("/submit-data/")
 async def submit_data(request: Request):
@@ -14,33 +43,45 @@ async def submit_data(request: Request):
         name = data.get("name")
         email = data.get("email")
         phone = data.get("phone")
-        print(name, email, phone)
+
+        # Connect to the database
+        conn = await connect_to_db()
+
+        # Check if email already exists
+        email_exists = await check_email_exist(conn, email)
+        if email_exists:
+            await conn.close()
+            return {"error": "Email already exists"}
 
         # Generate OTP
         otp = generate_otp()
 
-        # Create a multipart message
-        message = MIMEMultipart()
-        message["From"] = "GOVT Verfication COVID-19"  # Sender's email address
-        message["To"] = email
-        message["Subject"] = "OTP for Verification"
+        # Send email with OTP
+        await send_email(email, otp)
 
-        # Add body to the email
-        body = f"Your OTP is: {otp}"
-        message.attach(MIMEText(body, "plain"))
+        # Insert data into the database
+        try:
+            await conn.execute(
+                "INSERT INTO users (name, email, phone, otp) VALUES ($1, $2, $3, $4)",
+                name, email, phone, otp
+            )
+        except asyncpg.exceptions.UndefinedTableError:
+                # If the table doesn't exist, create it and then insert data
+                await conn.execute("""CREATE TABLE IF NOT EXISTS users (
+                                        id SERIAL PRIMARY KEY,
+                                        name TEXT,
+                                        email TEXT UNIQUE,
+                                        phone TEXT,
+                                        otp TEXT
+                                    )""")
+                await conn.execute(
+                    "INSERT INTO users (name, email, phone, otp) VALUES ($1, $2, $3, $4)",
+                    name, email, phone, otp
+                )
+                print("yes")
+        # Close the database connection
+        await conn.close()
 
-        # Establish SMTP connection
-        s = smtplib.SMTP('smtp.gmail.com', 587)
-        s.starttls()
-        s.login("sanjeevsanju929@gmail.com", "fhge kait cnqe mjba")
-
-        # Send email
-        s.sendmail("sanjeevsanju929@gmail.com", email, message.as_string())
-        s.quit()
-
-        print("Email sent successfully to:", email)
-
-        # Return a response indicating success
         return {"message": "Data received successfully"}
     except Exception as e:
         print("An error occurred:", str(e))
