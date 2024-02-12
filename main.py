@@ -66,19 +66,21 @@ async def submit_data(request: Request):
                 name, email, phone, otp
             )
         except asyncpg.exceptions.UndefinedTableError:
-                # If the table doesn't exist, create it and then insert data
-                await conn.execute("""CREATE TABLE IF NOT EXISTS users (
-                                        id SERIAL PRIMARY KEY,
-                                        name TEXT,
-                                        email TEXT UNIQUE,
-                                        phone TEXT,
-                                        otp TEXT
-                                    )""")
-                await conn.execute(
-                    "INSERT INTO users (name, email, phone, otp) VALUES ($1, $2, $3, $4)",
-                    name, email, phone, otp
-                )
-                print("yes")
+            # If the table doesn't exist, create it and then insert data
+            await conn.execute("""CREATE TABLE IF NOT EXISTS users (
+                                    id SERIAL PRIMARY KEY,
+                                    name TEXT,
+                                    email TEXT UNIQUE,
+                                    phone TEXT,
+                                    otp TEXT,
+                                    status TEXT,
+                                    issue_date DATE
+                                )""")
+            await conn.execute(
+                "INSERT INTO users (name, email, phone, otp) VALUES ($1, $2, $3, $4)",
+                name, email, phone, otp
+            )
+
         # Close the database connection
         await conn.close()
 
@@ -86,6 +88,54 @@ async def submit_data(request: Request):
     except Exception as e:
         print("An error occurred:", str(e))
         return {"error": "An error occurred while processing the request"}
+    
+@app.post("/otpgenerate/")
+async def submit_data(request: Request):
+    try:
+        data = await request.json()
+        email = data.get("email")
+
+        # Connect to the database
+        conn = await connect_to_db()
+
+        # Check if email already exists
+        email_exists = await check_email_exist(conn, email)
+        if not email_exists:
+            await conn.close()
+            return {"error": "Email not exists"}
+
+        try:
+            # Connect to the database
+            conn = await connect_to_db()
+
+            # Check if email already exists
+            email_exists = await check_email_exist(conn, email)
+            if not email_exists:
+                await conn.close()
+                return {"error": "Email does not exist"}
+
+            # Generate a new OTP
+            new_otp = generate_otp()
+
+            # Update the OTP for the specified email
+            await conn.execute(
+                "UPDATE users SET otp = $1 WHERE email = $2",
+                new_otp, email
+            )
+
+            # Close the database connection
+            await conn.close()
+
+            # Send email with the new OTP
+            await send_email(email, new_otp)
+
+            return {"message": "OTP updated and sent successfully"}
+        except Exception as e:
+            print("An error occurred:", str(e))
+            return {"error": "An error occurred while processing the request"} 
+    except Exception as e:
+        print("An error occurred:", str(e))
+        return {"error": "An error occurred while processing the request"}    
 
 if __name__ == "__main__":
     import uvicorn
