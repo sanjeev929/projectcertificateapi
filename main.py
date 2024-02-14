@@ -4,6 +4,7 @@ import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from fastapi import FastAPI, Request
+from asyncpg import exceptions
 
 app = FastAPI()
 
@@ -16,7 +17,7 @@ def generate_otp():
 
 async def send_email(email, otp):
     message = MIMEMultipart()
-    message["From"] = "GOVT Verification COVID-19"  # Sender's email address
+    message["From"] = "GOVT Verification COVID-19" 
     message["To"] = email
     message["Subject"] = "OTP for Verification"
     body = f"Your OTP is: {otp}"
@@ -43,30 +44,19 @@ async def submit_data(request: Request):
         name = data.get("name")
         email = data.get("email")
         phone = data.get("phone")
-
-        # Connect to the database
         conn = await connect_to_db()
-
-        # Check if email already exists
         email_exists = await check_email_exist(conn, email)
         if email_exists:
             await conn.close()
             return {"error": "Email already exists"}
-
-        # Generate OTP
         otp = generate_otp()
-
-        # Send email with OTP
         await send_email(email, otp)
-
-        # Insert data into the database
         try:
             await conn.execute(
                 "INSERT INTO users (name, email, phone, otp) VALUES ($1, $2, $3, $4)",
                 name, email, phone, otp
             )
         except asyncpg.exceptions.UndefinedTableError:
-            # If the table doesn't exist, create it and then insert data
             await conn.execute("""CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
                     name TEXT,
@@ -82,7 +72,6 @@ async def submit_data(request: Request):
                 name, email, phone, otp
             )
 
-        # Close the database connection
         await conn.close()
 
         return {"message": "Data received successfully"}
@@ -112,8 +101,6 @@ async def submit_data(request: Request):
             )
             print(current_name)
             await conn.close()
-
-            # Send email with the new OTP
             await send_email(email, new_otp)
             print(current_name)
             return {"name":current_name,"error":None}
@@ -165,18 +152,83 @@ async def submit_data(request: Request):
 async def get_all_users():
     try:
         conn = await connect_to_db()
-        
-        # Fetch all users from the database
-        query = "SELECT name, email, phone, state FROM users"
+        query = "SELECT name, email, phone, status FROM users"
         users = await conn.fetch(query)
-        
-        # Close the database connection
         await conn.close()
-        print(users)
-        # Return the list of users
-        return {"users": users}
+        if users:
+            names = [user['name'] for user in users]
+            emails = [user['email'] for user in users]
+            phones = [user['phone'] for user in users]
+            states = [user['state'] for user in users]
+            
+            return {
+                "names": names,
+                "emails": emails,
+                "phones": phones,
+                "states": states
+            }
+        else:
+            return {"message": "No users found"}
+    except Exception as e:
+        print(e)
+        return {"error": str(e)}
+    
+@app.post("/login/")
+async def register_admin(request: Request):
+    data = await request.json()
+    email = data.get("email")
+    password = data.get("password")
+    try:
+        conn = await connect_to_db()
+        query = "SELECT * FROM admins WHERE email = $1 AND password = $2"
+        admin = await conn.fetchrow(query, email, password)
+        await conn.close()
+        print(admin)
+        if admin:
+            return {"state": True,"error": None}
+        else:
+            return {"state":False,"error": "Invalid credentials"}
     except Exception as e:
         return {"error": str(e)}
+
+@app.post("/admin_registration/")
+async def register_admin(request: Request):
+    data = await request.json()
+    name = data.get("name")
+    email = data.get("email")
+    password = data.get("password")
+    try:
+        conn = await connect_to_db()
+        # Check if the table exists, create it if not
+        try:
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS admins (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(100),
+                    email VARCHAR(100),
+                    password VARCHAR(100)
+                )
+                """
+            )
+        except exceptions.PostgresError as e:
+            return {"error": str(e)}
+
+        # Insert admin data into the table
+        try:
+            await conn.execute(
+                """
+                INSERT INTO admins (name, email, password) VALUES ($1, $2, $3)
+                """,
+                name, email, password
+            )
+        except exceptions.PostgresError as e:
+            return {"error": str(e)}
+
+        await conn.close()
+        return {"state": True}
+    except Exception as e:
+        return {"error": str(e)} 
 
 if __name__ == "__main__":
     import uvicorn
