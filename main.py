@@ -68,14 +68,15 @@ async def submit_data(request: Request):
         except asyncpg.exceptions.UndefinedTableError:
             # If the table doesn't exist, create it and then insert data
             await conn.execute("""CREATE TABLE IF NOT EXISTS users (
-                                    id SERIAL PRIMARY KEY,
-                                    name TEXT,
-                                    email TEXT UNIQUE,
-                                    phone TEXT,
-                                    otp TEXT,
-                                    status TEXT,
-                                    issue_date DATE
-                                )""")
+                    id SERIAL PRIMARY KEY,
+                    name TEXT,
+                    email TEXT UNIQUE,
+                    phone TEXT,
+                    otp TEXT,
+                    status TEXT,
+                    issue_date DATE,
+                    certificate BYTEA
+                )""")
             await conn.execute(
                 "INSERT INTO users (name, email, phone, otp) VALUES ($1, $2, $3, $4)",
                 name, email, phone, otp
@@ -94,48 +95,88 @@ async def submit_data(request: Request):
     try:
         data = await request.json()
         email = data.get("email")
-
-        # Connect to the database
         conn = await connect_to_db()
-
-        # Check if email already exists
         email_exists = await check_email_exist(conn, email)
         if not email_exists:
             await conn.close()
-            return {"error": "Email not exists"}
-
+            return {"name":None,"error":"Email not exists"}
         try:
-            # Connect to the database
-            conn = await connect_to_db()
-
-            # Check if email already exists
-            email_exists = await check_email_exist(conn, email)
-            if not email_exists:
-                await conn.close()
-                return {"error": "Email does not exist"}
-
-            # Generate a new OTP
             new_otp = generate_otp()
-
-            # Update the OTP for the specified email
             await conn.execute(
                 "UPDATE users SET otp = $1 WHERE email = $2",
                 new_otp, email
             )
-
-            # Close the database connection
+            current_name = await conn.fetchval(
+                "SELECT name FROM users WHERE email = $1",
+                email
+            )
+            print(current_name)
             await conn.close()
 
             # Send email with the new OTP
             await send_email(email, new_otp)
-
-            return {"message": "OTP updated and sent successfully"}
+            print(current_name)
+            return {"name":current_name,"error":None}
+        
         except Exception as e:
             print("An error occurred:", str(e))
-            return {"error": "An error occurred while processing the request"} 
+            return {"name":None,"error":str(e)}
     except Exception as e:
         print("An error occurred:", str(e))
-        return {"error": "An error occurred while processing the request"}    
+        return {"name":None,"error":str(e)}
+    
+@app.post("/otpverify/")
+async def submit_data(request: Request):
+    try:
+        data = await request.json()
+        email = data.get("email")
+        otp = data.get("otp")
+        print(email)
+        conn = await connect_to_db()
+        email_exists = await check_email_exist(conn, email)
+        if not email_exists:
+            await conn.close()
+            return {"name":None,"error":"Email not exists"}
+        try:
+        
+            current_otp = await conn.fetchval(
+            "SELECT otp FROM users WHERE email = $1",
+            email
+                )
+            current_name = await conn.fetchval(
+            "SELECT name FROM users WHERE email = $1",
+            email
+                )
+            await conn.close()
+            print(type(current_otp),type(otp),current_name)
+            if int(current_otp) == int(otp):
+
+                return {"otp status":True,"name":current_name}
+            else:
+                return {"otp status":False,"name":current_name}
+        except Exception as e:
+            print("An error occurred:", str(e))
+            return {"error":str(e)}
+    except Exception as e:
+        print("An error occurred:", str(e))
+        return {"error":str(e)}    
+
+@app.get("/getall/")
+async def get_all_users():
+    try:
+        conn = await connect_to_db()
+        
+        # Fetch all users from the database
+        query = "SELECT name, email, phone, state FROM users"
+        users = await conn.fetch(query)
+        
+        # Close the database connection
+        await conn.close()
+        print(users)
+        # Return the list of users
+        return {"users": users}
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
