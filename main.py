@@ -3,14 +3,69 @@ import smtplib
 import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request,Response
 from asyncpg import exceptions
+import datetime
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.colors import HexColor
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Frame
+from reportlab.pdfgen import canvas
+from io import BytesIO
 
 app = FastAPI()
-
+current_date = datetime.date.today()
 async def connect_to_db():
     return await asyncpg.connect(user="postgres", password="123",
                                  database="certificate", host="localhost")
+
+def generate_covid_certificate(recipient_name, test_result, date, logo_filename, filename):
+    print(recipient_name,test_result,date,logo_filename,filename)
+    pdf_buffer = BytesIO()
+    c = canvas.Canvas(pdf_buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    title_style = styles['Title']
+    body_style = styles['BodyText']
+    
+    try:
+        c.setFillColor(HexColor("#FFFFFF"))
+        c.rect(0, 0, letter[0], letter[1], fill=True)
+        c.drawImage("logo3.png", 210, 375, width=200, height=200, preserveAspectRatio=True)
+        c.drawImage(logo_filename, 25, 700, width=75, height=75)
+        c.setFont("Helvetica-Bold", 32)
+        c.setFillColor(HexColor("#1F497D"))
+        c.drawString(125, 750, "COVID-19 Test Certificate")
+        
+        c.setFont("Helvetica", 12)
+        c.drawString(125, 650, f"This is to certify that {recipient_name}")
+        c.drawString(125, 635, "has been tested for COVID-19 on:")
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(125, 610, f"{date}")
+        c.setFont("Helvetica", 12)
+        c.drawString(125, 580, "This certificate is issued to confirm that the individual named above has undergone testing ")
+        c.drawString(125, 565, "for COVID-19 on the specified date. The results of the test indicate the individual's")
+        c.drawString(125, 550, "current health status with regard and should be presented as required.")
+        
+        if test_result.lower() == "positive":
+            c.setFillColor(HexColor("#FF0000"))  # Red for positive
+        else:
+            c.setFillColor(HexColor("#008000"))  # Green for negative
+        
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(125, 510, f"Test Result: {test_result.capitalize()}")
+        c.setLineWidth(2)
+        
+        c.line(100, 200, 400, 200)
+        c.setFont("Helvetica", 12)
+        c.drawString(100, 180, "Authorized Signature")
+        c.save()  # Uncomment this line if you want to save the PDF to a file
+    except Exception as e:
+        print("An error occurred:", e)
+    finally:
+        pdf_bytes = pdf_buffer.getvalue()
+        pdf_buffer.close()
+    return pdf_bytes
 
 def generate_otp():
     return str(random.randint(100000, 999999))
@@ -156,17 +211,7 @@ async def get_all_users():
         users = await conn.fetch(query)
         await conn.close()
         if users:
-            names = [user['name'] for user in users]
-            emails = [user['email'] for user in users]
-            phones = [user['phone'] for user in users]
-            states = [user['state'] for user in users]
-            
-            return {
-                "names": names,
-                "emails": emails,
-                "phones": phones,
-                "states": states
-            }
+            return users
         else:
             return {"message": "No users found"}
     except Exception as e:
@@ -228,7 +273,72 @@ async def register_admin(request: Request):
         await conn.close()
         return {"state": True}
     except Exception as e:
-        return {"error": str(e)} 
+        return {"error": str(e)}
+    
+@app.post("/adminchange/")
+async def submit_data(request: Request):
+    try:
+        data = await request.json()
+        email = data.get("email")
+        status = data.get("status")
+        conn = await connect_to_db()
+        try:
+            await conn.execute(
+                "UPDATE users SET status = $1, issue_date = $2  WHERE email = $3",
+                status, current_date, email
+            )
+            current_user = await conn.fetchrow(
+                "SELECT name, status, issue_date FROM users WHERE email = $1",
+                email
+            )
+            print(current_user[0])
+            if current_user[1] =='true':
+                status = 'positive'
+            else:
+                status ='negative'     
+            logo_filename = "logo2.png"
+            certificate=generate_covid_certificate(current_user[0], status, current_user[2], logo_filename,'covid_certificate.pdf')
+            print('example',certificate)
+            await conn.execute(
+                "UPDATE users SET certificate = $1 WHERE email = $2",
+                certificate, email
+            )
+            await conn.close()
+            return "successfully update state"
+        
+        except Exception as e:
+            print("An error occurred:", str(e))
+            return {"name":None,"error":str(e)}
+    except Exception as e:
+        print("An error occurred:", str(e))
+        return {"name":None,"error":str(e)}
+
+
+@app.post("/downloadcertificate/")
+async def submit_data1(request: Request):
+    print("========================================111111111")
+    try:
+        data = await request.json()
+        email = data.get("email")
+        print(email)
+        conn = await connect_to_db()
+        try:
+            certificate = await conn.fetchval(
+            "SELECT certificate FROM users WHERE email = $1",
+            email
+                )
+            await conn.close()
+            print(certificate)
+            return Response(content=certificate, media_type="application/octet-stream")
+        except Exception as e:
+            print("An error occurred:", str(e))
+            return {"name": None, "error": str(e)}
+    except Exception as e:
+        print("An error occurred:", str(e))
+        return {"name": None, "error": str(e)}
+
+
+
 
 if __name__ == "__main__":
     import uvicorn
