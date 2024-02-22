@@ -285,6 +285,7 @@ async def submit_data(request: Request):
                 status ='negative'     
             logo_filename = "logo2.png"
             certificate=generate_covid_certificate(current_user[0], status, current_user[2], logo_filename,'covid_certificate.pdf')
+            print("sucess",certificate)
             await conn.execute(
                 "UPDATE users SET certificate = $1 WHERE email = $2",
                 certificate, email
@@ -293,8 +294,10 @@ async def submit_data(request: Request):
             return "successfully update state"
         
         except Exception as e:
+            print("failed",certificate)
             return {"name":None,"error":str(e)}
     except Exception as e:
+        print("failed",certificate)
         return {"name":None,"error":str(e)}
 
 
