@@ -21,7 +21,6 @@ async def connect_to_db():
                                  database="certificate", host="localhost")
 
 def generate_covid_certificate(recipient_name, test_result, date, logo_filename, filename):
-    print(recipient_name,test_result,date,logo_filename,filename)
     pdf_buffer = BytesIO()
     c = canvas.Canvas(pdf_buffer, pagesize=letter)
     styles = getSampleStyleSheet()
@@ -61,7 +60,7 @@ def generate_covid_certificate(recipient_name, test_result, date, logo_filename,
         c.drawString(100, 180, "Authorized Signature")
         c.save()  # Uncomment this line if you want to save the PDF to a file
     except Exception as e:
-        print("An error occurred:", e)
+        pass
     finally:
         pdf_bytes = pdf_buffer.getvalue()
         pdf_buffer.close()
@@ -131,7 +130,6 @@ async def submit_data(request: Request):
 
         return {"message": "Data received successfully"}
     except Exception as e:
-        print("An error occurred:", str(e))
         return {"error": "An error occurred while processing the request"}
     
 @app.post("/otpgenerate/")
@@ -154,17 +152,13 @@ async def submit_data(request: Request):
                 "SELECT name FROM users WHERE email = $1",
                 email
             )
-            print(current_name)
             await conn.close()
             await send_email(email, new_otp)
-            print(current_name)
             return {"name":current_name,"error":None}
         
         except Exception as e:
-            print("An error occurred:", str(e))
             return {"name":None,"error":str(e)}
     except Exception as e:
-        print("An error occurred:", str(e))
         return {"name":None,"error":str(e)}
     
 @app.post("/otpverify/")
@@ -173,7 +167,6 @@ async def submit_data(request: Request):
         data = await request.json()
         email = data.get("email")
         otp = data.get("otp")
-        print(email)
         conn = await connect_to_db()
         email_exists = await check_email_exist(conn, email)
         if not email_exists:
@@ -190,17 +183,14 @@ async def submit_data(request: Request):
             email
                 )
             await conn.close()
-            print(type(current_otp),type(otp),current_name)
             if int(current_otp) == int(otp):
 
                 return {"otp status":True,"name":current_name}
             else:
                 return {"otp status":False,"name":current_name}
         except Exception as e:
-            print("An error occurred:", str(e))
             return {"error":str(e)}
     except Exception as e:
-        print("An error occurred:", str(e))
         return {"error":str(e)}    
 
 @app.get("/getall/")
@@ -215,7 +205,6 @@ async def get_all_users():
         else:
             return {"message": "No users found"}
     except Exception as e:
-        print(e)
         return {"error": str(e)}
     
 @app.post("/login/")
@@ -228,7 +217,6 @@ async def register_admin(request: Request):
         query = "SELECT * FROM admins WHERE email = $1 AND password = $2"
         admin = await conn.fetchrow(query, email, password)
         await conn.close()
-        print(admin)
         if admin:
             return {"state": True,"error": None}
         else:
@@ -291,14 +279,12 @@ async def submit_data(request: Request):
                 "SELECT name, status, issue_date FROM users WHERE email = $1",
                 email
             )
-            print(current_user[0])
             if current_user[1] =='true':
                 status = 'positive'
             else:
                 status ='negative'     
             logo_filename = "logo2.png"
             certificate=generate_covid_certificate(current_user[0], status, current_user[2], logo_filename,'covid_certificate.pdf')
-            print('example',certificate)
             await conn.execute(
                 "UPDATE users SET certificate = $1 WHERE email = $2",
                 certificate, email
@@ -307,20 +293,16 @@ async def submit_data(request: Request):
             return "successfully update state"
         
         except Exception as e:
-            print("An error occurred:", str(e))
             return {"name":None,"error":str(e)}
     except Exception as e:
-        print("An error occurred:", str(e))
         return {"name":None,"error":str(e)}
 
 
 @app.post("/downloadcertificate/")
 async def submit_data1(request: Request):
-    print("========================================111111111")
     try:
         data = await request.json()
         email = data.get("email")
-        print(email)
         conn = await connect_to_db()
         try:
             certificate = await conn.fetchval(
@@ -328,17 +310,11 @@ async def submit_data1(request: Request):
             email
                 )
             await conn.close()
-            print(certificate)
             return Response(content=certificate, media_type="application/octet-stream")
         except Exception as e:
-            print("An error occurred:", str(e))
             return {"name": None, "error": str(e)}
     except Exception as e:
-        print("An error occurred:", str(e))
         return {"name": None, "error": str(e)}
-
-
-
 
 if __name__ == "__main__":
     import uvicorn
