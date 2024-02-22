@@ -102,7 +102,7 @@ async def submit_data(request: Request):
         email_exists = await check_email_exist(conn, email)
         if email_exists:
             await conn.close()
-            return {"message":None,"error": True}
+            return {"error": True}
         otp = generate_otp()
         await send_email(email, otp)
         try:
@@ -128,9 +128,9 @@ async def submit_data(request: Request):
 
         await conn.close()
 
-        return {"message": "Data received successfully","error":False}
+        return {"error":False}
     except Exception as e:
-        return {"message":None,"error": "An error occurred while processing the request"}
+        return {"error": True}
     
 @app.post("/otpgenerate/")
 async def submit_data(request: Request):
