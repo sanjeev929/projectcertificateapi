@@ -283,7 +283,7 @@ async def submit_data(request: Request):
                 status = 'positive'
             else:
                 status ='negative'     
-            logo_filename = "logo2.png"
+            logo_filename = "/home/ubuntu/projectcertificateapi/logo3.png"
             certificate=generate_covid_certificate(current_user[0], status, current_user[2], logo_filename,'covid_certificate.pdf')
             print("sucess",certificate)
             await conn.execute(
