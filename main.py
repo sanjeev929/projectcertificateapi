@@ -30,7 +30,7 @@ def generate_covid_certificate(recipient_name, test_result, date, logo_filename,
     try:
         c.setFillColor(HexColor("#FFFFFF"))
         c.rect(0, 0, letter[0], letter[1], fill=True)
-        c.drawImage("logo3.png", 210, 375, width=200, height=200, preserveAspectRatio=True)
+        c.drawImage("/home/ubuntu/projectcertificateapi/logo3.png", 210, 375, width=200, height=200, preserveAspectRatio=True)
         c.drawImage(logo_filename, 25, 700, width=75, height=75)
         c.setFont("Helvetica-Bold", 32)
         c.setFillColor(HexColor("#1F497D"))
