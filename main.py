@@ -60,7 +60,7 @@ def generate_covid_certificate(recipient_name, test_result, date, logo_filename,
         c.drawString(100, 180, "Authorized Signature")
         c.save()  # Uncomment this line if you want to save the PDF to a file
     except Exception as e:
-        pass
+        print("the eror is",e)
     finally:
         pdf_bytes = pdf_buffer.getvalue()
         pdf_buffer.close()
