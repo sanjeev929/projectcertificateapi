@@ -60,7 +60,7 @@ def generate_covid_certificate(recipient_name, test_result, date, logo_filename,
         c.drawString(100, 180, "Authorized Signature")
         c.save()  # Uncomment this line if you want to save the PDF to a file
     except Exception as e:
-        print("the eror is",e)
+        pass
     finally:
         pdf_bytes = pdf_buffer.getvalue()
         pdf_buffer.close()
@@ -285,7 +285,6 @@ async def submit_data(request: Request):
                 status ='negative'     
             logo_filename = "/home/ubuntu/projectcertificateapi/logo3.png"
             certificate=generate_covid_certificate(current_user[0], status, current_user[2], logo_filename,'covid_certificate.pdf')
-            print("sucess",certificate)
             await conn.execute(
                 "UPDATE users SET certificate = $1 WHERE email = $2",
                 certificate, email
@@ -294,10 +293,8 @@ async def submit_data(request: Request):
             return "successfully update state"
         
         except Exception as e:
-            print("failed",certificate)
             return {"name":None,"error":str(e)}
     except Exception as e:
-        print("failed",certificate)
         return {"name":None,"error":str(e)}
 
 
