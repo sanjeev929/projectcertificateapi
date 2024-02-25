@@ -103,7 +103,7 @@ async def submit_data(request: Request):
         email_exists = await check_email_exist(conn, email)
         if email_exists:
             await conn.close()
-            return {"error": True}
+            return {"error": False}
         otp = generate_otp()
         await send_email(email, otp)
         try:
@@ -129,7 +129,7 @@ async def submit_data(request: Request):
 
         await conn.close()
 
-        return {"error":False}
+        return {"error":True}
     except Exception as e:
         return {"error": True}
     
@@ -318,7 +318,23 @@ async def submit_data1(request: Request):
             return {"name": None, "error": str(e)}
     except Exception as e:
         return {"name": None, "error": str(e)}
-
+    
+@app.delete("/deleteuser/")
+async def delete_user_by_email(request: Request):
+    try:
+        data = await request.json()
+        email = data.get("email")
+        conn = await connect_to_db()
+        try:
+            # Delete the user from the database based on the email
+            await conn.execute("DELETE FROM users WHERE email = $1", email)
+            await conn.close()
+            return {"error": False}
+        except Exception as e:
+            return {"error":True}
+    except Exception as e:
+        return {"error": True}
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)
